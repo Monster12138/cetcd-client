@@ -1,5 +1,5 @@
 # cetcd-client
-A etcd v2 client in C 
+A C client for etcd.
 ## Install libcurl
 if on Ubuntu
 ```
@@ -7,7 +7,7 @@ apt-get install libcur14-openssl-dev
 ```
 if on Centos/RetHat
 ```
-yum install lincurl-devel
+yum install libcurl-devel
 ```
 if permission is denied, use `sudo` to install
 
