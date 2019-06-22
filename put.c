@@ -23,6 +23,10 @@
 #include <string.h>
 #include <assert.h>
 
+#define HOST_BUF_SIZE       1024
+#define URL_BUF_SIZE        2048
+#define BODY_BUF_SIZE       1024
+
 int main(int argc, char **argv)
 {
     if(argc != 4) {
@@ -33,13 +37,13 @@ int main(int argc, char **argv)
     char *key = argv[2];
     char *value = argv[3];
 
-    char host[1024] = {0};
+    char host[HOST_BUF_SIZE] = {0};
     sprintf(host, "Host: %s", addr);
 
-    char url[1024] = {0};
+    char url[URL_BUF_SIZE] = {0};
     sprintf(url, "http://%s/v2/keys/%s", addr, key);
 
-    char body[1024] = {0};
+    char body[BODY_BUF_SIZE] = {0};
     sprintf(body, "value=%s", value);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -59,11 +63,16 @@ int main(int argc, char **argv)
     curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, strlen(body));
 
     CURLcode ret = curl_easy_perform(c);
-    if (ret != CURLE_OK) {
-        curl_easy_strerror(ret);
-    }
 
     curl_easy_cleanup(c);
     curl_global_cleanup();
+
+    if (ret != CURLE_OK) {
+        curl_easy_strerror(ret);
+        return 1;
+    }
+
+    return 0;
+
 }
 

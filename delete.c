@@ -3,7 +3,7 @@
 │Esc│   │ F1│ F2│ F3│ F4│ │ F5│ F6│ F7│ F8│ │ F9│F10│F11│F12│ │P/S│S L│P/B│  ┌┐    ┌┐    ┌┐
 └───┘   └───┴───┴───┴───┘ └───┴───┴───┴───┘ └───┴───┴───┴───┘ └───┴───┴───┘  └┘    └┘    └┘
 ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────┐ ┌───┬───┬───┐ ┌───┬───┬───┬───┐
-│~ `│! 1│@ 2│# 3│$ 4│% 5│^ 6│& 7│* 8│( 9│ ) 0│_ -│+ =│ BacSp │ │Ins│Hom│PUp│ │N L│ / │// │ - │
+│~ `│! 1│@ 2│# 3│$ 4│% 5│^ 6│& 7│* 8│( 9│) 0│_ -│+ =│ BacSp │ │Ins│Hom│PUp│ │N L│ / │// │ - │
 ├───┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─────┤ ├───┼───┼───┤ ├───┼───┼───┼───┤
 │ Tab │ Q │ W │ E │ R │ T │ Y │ U │ I │ O │ P │{ [│} ]│  |  │ │Del│End│PDn│ │ 7 │ 8 │ 9 │   │
 ├─────┴┬──┴┬──┴┬──┴┬──┴┬──┴┬──┴┬──┴┬──┴┬──┴┬──┴┬──┴┬──┴─────┤ └───┴───┴───┘ ├───┼───┼───┤ + │
@@ -14,18 +14,18 @@
 │ Ctrl│    │Alt │         Space         │ Alt│    │    │Ctrl│ │ ← │ ↓ │ → │ │   0   │ . │←─┘│
 └─────┴────┴────┴───────────────────────┴────┴────┴────┴────┘ └───┴───┴───┘ └───────┴───┴───┘
 # @Author       : Guo Lei
-# @Created Time : 2019-06-22 01:07:39
+# @Created Time : 2019-06-23 01:32:40
 # @Description  : 
 ******************************************************************************************/
-
 
 #include <curl/curl.h>
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
 
-#define HOST_BUF_SIZE     1024
-#define URL_BUF_SIZE      2048
+#define HOST_BUF_SIZE       1024
+#define URL_BUF_SIZE        2048
+#define BODY_BUF_SIZE       1024
 
 int main(int argc, char **argv)
 {
@@ -52,6 +52,7 @@ int main(int argc, char **argv)
     //headers = curl_slist_append(headers, "Content-Length: 10");
     //headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
 
+    curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, "DELETE");
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(c, CURLOPT_URL, url);
 
@@ -59,11 +60,14 @@ int main(int argc, char **argv)
 
     curl_easy_cleanup(c);
     curl_global_cleanup();
+
     if (ret != CURLE_OK) {
         curl_easy_strerror(ret);
         return 1;
     }
 
     return 0;
+
 }
+
 

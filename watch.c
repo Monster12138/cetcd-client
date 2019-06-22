@@ -14,18 +14,45 @@
 │ Ctrl│    │Alt │         Space         │ Alt│    │    │Ctrl│ │ ← │ ↓ │ → │ │   0   │ . │←─┘│
 └─────┴────┴────┴───────────────────────┴────┴────┴────┴────┘ └───┴───┴───┘ └───────┴───┴───┘
 # @Author       : Guo Lei
-# @Created Time : 2019-06-22 01:07:39
+# @Created Time : 2019-06-22 13:52:03
 # @Description  : 
 ******************************************************************************************/
-
-
 #include <curl/curl.h>
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <signal.h>
+#include <pthread.h>
+#include <unistd.h>
 
+#define WATCH_OK          (void *)0;
+#define WATCH_ERROR       (void *)-1;
 #define HOST_BUF_SIZE     1024
 #define URL_BUF_SIZE      2048
+
+int quit = 0;
+
+void sighandler(int sig)
+{
+    quit = 1;
+}
+
+void *thread_watch(void *arg)
+{
+    CURL *c = (CURL*)arg;
+    while(1)
+    {
+        CURLcode ret = curl_easy_perform(c);
+        if (ret != CURLE_OK) {
+            curl_easy_strerror(ret);
+            curl_easy_cleanup(c);
+            curl_global_cleanup();
+            return WATCH_ERROR;
+        }
+    }
+
+    return WATCH_OK;
+}
 
 int main(int argc, char **argv)
 {
@@ -40,7 +67,7 @@ int main(int argc, char **argv)
     sprintf(host, "Host: %s", addr);
 
     char url[URL_BUF_SIZE] = {0};
-    sprintf(url, "http://%s/v2/keys/%s", addr, key);
+    sprintf(url, "http://%s/v2/keys/%s?wait=true", addr, key);
 
     curl_global_init(CURL_GLOBAL_ALL);
     CURL * c = curl_easy_init();
@@ -54,16 +81,20 @@ int main(int argc, char **argv)
 
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(c, CURLOPT_URL, url);
+    signal(SIGINT, sighandler);
 
-    CURLcode ret = curl_easy_perform(c);
+    pthread_t th;
+    pthread_create(&th, NULL, thread_watch, c);
+    
+    while(!quit)
+    {
+        usleep(10000);
+    }
 
+    pthread_cancel(th);
     curl_easy_cleanup(c);
     curl_global_cleanup();
-    if (ret != CURLE_OK) {
-        curl_easy_strerror(ret);
-        return 1;
-    }
+    
 
     return 0;
 }
-
