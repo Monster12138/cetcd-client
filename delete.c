@@ -22,10 +22,54 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include "cJSON/include/cJSON.h"
 
 #define HOST_BUF_SIZE       1024
 #define URL_BUF_SIZE        2048
 #define BODY_BUF_SIZE       1024
+#define DEBUG               0
+
+size_t process_response(void *buffer, size_t size, size_t nmemb, void *arg)
+{
+    cJSON *json, *item;
+    json = cJSON_Parse((const char *)buffer);
+    if(json == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if(error_ptr != NULL) {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        exit(0);
+    }
+
+#if DEBUG
+    char *out = cJSON_Print(json);
+    printf("%s\n", out);
+#endif
+
+    item = cJSON_GetObjectItemCaseSensitive(json, "errorCode");
+    if(cJSON_IsNumber(item) && item->valueint > 0) {
+        item = cJSON_GetObjectItemCaseSensitive(json, "message");
+        if(cJSON_IsString(item) && item->valuestring != NULL) {
+            printf("%s\n", item->valuestring);
+        }
+
+        cJSON_Delete(json);
+        exit(0);
+    }
+    printf("OK\n");
+
+    cJSON *array_item = cJSON_GetObjectItemCaseSensitive(json, "node");
+    item = cJSON_GetObjectItem(array_item, "key");
+    if(cJSON_IsString(item) && item->valuestring != NULL) {
+        printf("%s: %s\n", "delete key", item->valuestring);
+    }
+
+    cJSON_Delete(json);
+
+    return 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -49,12 +93,11 @@ int main(int argc, char **argv)
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Accept: */*");
     headers = curl_slist_append(headers, host);
-    //headers = curl_slist_append(headers, "Content-Length: 10");
-    //headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
 
     curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, "DELETE");
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(c, CURLOPT_URL, url);
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, process_response);
 
     CURLcode ret = curl_easy_perform(c);
 

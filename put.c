@@ -22,10 +22,68 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include "cJSON/include/cJSON.h"
 
 #define HOST_BUF_SIZE       1024
 #define URL_BUF_SIZE        2048
 #define BODY_BUF_SIZE       1024
+#define DEBUG               1
+
+size_t process_response(void *buffer, size_t size, size_t nmemb, void *arg)
+{
+    cJSON *json, *item;
+    json = cJSON_Parse((const char *)buffer);
+    if(json == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if(error_ptr != NULL) {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        exit(0);
+    }
+
+#if DEBUG
+    char *out = cJSON_Print(json);
+    printf("%s\n", out);
+#endif
+
+    item = cJSON_GetObjectItemCaseSensitive(json, "errorCode");
+    if(cJSON_IsNumber(item) && item->valueint > 0) {
+        item = cJSON_GetObjectItemCaseSensitive(json, "message");
+        if(cJSON_IsString(item) && item->valuestring != NULL) {
+            printf("%s\n", item->valuestring);
+        }
+
+        cJSON_Delete(json);
+        exit(0);
+    }
+    printf("OK\n");
+
+    cJSON *object = cJSON_GetObjectItemCaseSensitive(json, "node");
+    item = cJSON_GetObjectItem(object, "key");
+    if(cJSON_IsString(item) && item->valuestring != NULL) {
+        printf("%s: %s\n", "key", item->valuestring);
+    }
+
+    cJSON *prev_object = NULL;
+    prev_object = cJSON_GetObjectItemCaseSensitive(json, "prevNode");
+    if(!cJSON_IsNull(prev_object)) {
+        item = cJSON_GetObjectItem(prev_object, "value");
+        if(cJSON_IsString(item) && item->valuestring != NULL) {
+            printf("%s: %s -> ", "old_value", item->valuestring);
+        }
+    }
+
+    item = cJSON_GetObjectItem(object, "value");
+    if(cJSON_IsString(item) && item->valuestring != NULL) {
+        printf("%6s: %s\n", "value", item->valuestring);
+    }
+
+    cJSON_Delete(json);
+
+    return 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -61,6 +119,7 @@ int main(int argc, char **argv)
     curl_easy_setopt(c, CURLOPT_URL, url);
     curl_easy_setopt(c, CURLOPT_POSTFIELDS, body);
     curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, strlen(body));
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, process_response);
 
     CURLcode ret = curl_easy_perform(c);
 

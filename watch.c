@@ -24,34 +24,140 @@
 #include <signal.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include "cJSON/include/cJSON.h"
 
-#define WATCH_OK          (void *)0;
-#define WATCH_ERROR       (void *)-1;
 #define HOST_BUF_SIZE     1024
 #define URL_BUF_SIZE      2048
+#define DEBUG             0
 
 int quit = 0;
+CURL *c; 
 
 void sighandler(int sig)
 {
-    quit = 1;
+    curl_easy_cleanup(c);
+    curl_global_cleanup();
+
+    exit(0);
 }
 
-void *thread_watch(void *arg)
+void response_put(cJSON *json)
 {
-    CURL *c = (CURL*)arg;
-    while(1)
-    {
-        CURLcode ret = curl_easy_perform(c);
-        if (ret != CURLE_OK) {
-            curl_easy_strerror(ret);
-            curl_easy_cleanup(c);
-            curl_global_cleanup();
-            return WATCH_ERROR;
+    cJSON *item;
+    if(json == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if(error_ptr != NULL) {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        return;
+    }
+
+    printf("PUT\n");
+
+    item = cJSON_GetObjectItemCaseSensitive(json, "errorCode");
+    if(cJSON_IsNumber(item) && item->valueint > 0) {
+        item = cJSON_GetObjectItemCaseSensitive(json, "message");
+        if(cJSON_IsString(item) && item->valuestring != NULL) {
+            printf("%s\n", item->valuestring);
+        }
+
+        return;
+    }
+
+    cJSON *object = cJSON_GetObjectItemCaseSensitive(json, "node");
+    item = cJSON_GetObjectItem(object, "key");
+    if(cJSON_IsString(item) && item->valuestring != NULL) {
+        printf("%s: %s\n", "key", item->valuestring);
+    }
+
+    cJSON *prev_object = NULL;
+    prev_object = cJSON_GetObjectItemCaseSensitive(json, "prevNode");
+    if(!cJSON_IsNull(prev_object)) {
+        item = cJSON_GetObjectItem(prev_object, "value");
+        if(cJSON_IsString(item) && item->valuestring != NULL) {
+            printf("%s: %s -> ", "old_value", item->valuestring);
         }
     }
 
-    return WATCH_OK;
+    item = cJSON_GetObjectItem(object, "value");
+    if(cJSON_IsString(item) && item->valuestring != NULL) {
+        printf("%s: %s\n", "value", item->valuestring);
+    }
+}
+
+void response_delete(cJSON *json)
+{
+    cJSON *item;
+    if(json == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if(error_ptr != NULL) {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        return;
+    }
+
+    printf("DELETE\n");
+
+    item = cJSON_GetObjectItemCaseSensitive(json, "errorCode");
+    if(cJSON_IsNumber(item) && item->valueint > 0) {
+        item = cJSON_GetObjectItemCaseSensitive(json, "message");
+        if(cJSON_IsString(item) && item->valuestring != NULL) {
+            printf("%s\n", item->valuestring);
+        }
+
+        cJSON_Delete(json);
+        return;
+    }
+
+    cJSON *object = cJSON_GetObjectItemCaseSensitive(json, "node");
+    item = cJSON_GetObjectItem(object, "key");
+    if(cJSON_IsString(item) && item->valuestring != NULL) {
+        printf("%s: %s\n", "key", item->valuestring);
+    }
+
+    cJSON *prev_object = NULL;
+    prev_object = cJSON_GetObjectItemCaseSensitive(json, "prevNode");
+    if(!cJSON_IsNull(prev_object)) {
+        item = cJSON_GetObjectItem(prev_object, "value");
+        if(cJSON_IsString(item) && item->valuestring != NULL) {
+            printf("%s: %s\n", "old_value", item->valuestring);
+        }
+    }
+}
+
+size_t process_response(void *buffer, size_t size, size_t nmemb, void *arg)
+{
+    cJSON *json, *item;
+    json = cJSON_Parse((const char *)buffer);
+    if(json == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if(error_ptr != NULL) {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        return CURLE_WRITE_ERROR;
+    }
+
+#if DEBUG
+    char *out = cJSON_Print(json);
+    printf("%s\n", out);
+#endif
+
+    item = cJSON_GetObjectItem(json, "action");
+    if(!(cJSON_IsString(item) && item->valuestring != NULL)) {
+        cJSON_Delete(json);
+        return CURLE_WRITE_ERROR;
+    }
+
+    if(strcmp(item->valuestring, "set") == 0) {
+        response_put(json);
+    }
+    else if(strcmp(item->valuestring, "delete") == 0) {
+        response_delete(json);
+    }
+    cJSON_Delete(json);
+
+    return size * nmemb;
 }
 
 int main(int argc, char **argv)
@@ -70,31 +176,31 @@ int main(int argc, char **argv)
     sprintf(url, "http://%s/v2/keys/%s?wait=true", addr, key);
 
     curl_global_init(CURL_GLOBAL_ALL);
-    CURL * c = curl_easy_init();
+
+    c = curl_easy_init();
     assert(c != NULL);
-    
+
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Accept: */*");
     headers = curl_slist_append(headers, host);
-    //headers = curl_slist_append(headers, "Content-Length: 10");
-    //headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
 
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(c, CURLOPT_URL, url);
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, process_response);
     signal(SIGINT, sighandler);
 
-    pthread_t th;
-    pthread_create(&th, NULL, thread_watch, c);
-    
-    while(!quit)
+    while(1)
     {
-        usleep(10000);
+        CURLcode ret = curl_easy_perform(c);
+        if (ret != CURLE_OK) {
+            curl_easy_strerror(ret);
+            curl_easy_cleanup(c);
+            curl_global_cleanup();
+            return 1;
+        }
     }
 
-    pthread_cancel(th);
-    curl_easy_cleanup(c);
-    curl_global_cleanup();
+    /* nerver run here */
     
-
     return 0;
 }
