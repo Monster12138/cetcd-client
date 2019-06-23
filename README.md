@@ -48,4 +48,4 @@ for example:
 ```
 ./watch 127.0.0.1:2379 foo
 ```
-** If you want to end watch, please press CTRL+C. The program will exit gracefully. 
+**If you want to end watch, please press CTRL+C. The program will exit gracefully.**
